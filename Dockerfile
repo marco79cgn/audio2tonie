@@ -4,7 +4,10 @@ RUN apt-get update && apt-get install -y opus-tools
 
 WORKDIR /app
 
-COPY . .
+# Copy opus2tonie files
+COPY opus2tonie.py .
+COPY tonie_header.proto .
+COPY tonie_header_pb2.py .
 
 # Install static ffmpeg
 COPY --from=mwader/static-ffmpeg:7.1 /ffmpeg /usr/bin/
