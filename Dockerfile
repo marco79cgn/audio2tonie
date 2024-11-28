@@ -16,6 +16,7 @@ COPY --from=mwader/static-ffmpeg:7.1 /ffmpeg /usr/bin/
 RUN python3 -m venv /venv
 ENV PATH=/venv/bin:$PATH
 
+# Install protobuf
 RUN pip3 install protobuf
 
 # Add a script-based alias
