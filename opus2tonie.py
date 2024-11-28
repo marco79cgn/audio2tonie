@@ -926,8 +926,10 @@ def get_opus_tempfile(ffmpeg_binary, opus_binary, filename, bitrate, vbr=True):
 
 def filter_directories(glob_list):
     result = []
+    EXTENTIONS = {".mp3", ".mp2", ".m4a", ".m4b", ".opus", ".ogg", ".wav", ".aac", ".mp4"}
     for name in glob_list:
-        if os.path.isfile(name):
+        ext = os.path.splitext(name)[1]
+        if os.path.isfile(name) and ext in EXTENTIONS:
             result.append(name)
     return result
 
