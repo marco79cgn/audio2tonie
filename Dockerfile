@@ -1,6 +1,6 @@
-FROM ubuntu:latest
+FROM python:3.13.0-slim-bookworm
 
-RUN apt-get update && apt-get install -y opus-tools && apt-get install -y python3 && apt-get install -y python3-pip && apt-get install -y python3-venv
+RUN apt-get update && apt-get install -y opus-tools
 
 WORKDIR /app
 
