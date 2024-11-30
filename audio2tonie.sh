@@ -26,7 +26,6 @@ elif [[ "$SOURCE" == *.* ]]; then
     count=1
 else
     if [[ $RECURSIVE ]]; then
-      echo "Transcoding recursive, ignoring output-filename"
       echo $SEPARATOR
       for d in $SOURCE/*/ ; do
           DIRNAME=$(basename "$d")
