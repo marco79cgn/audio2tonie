@@ -8,6 +8,7 @@ WORKDIR /app
 COPY opus2tonie.py .
 COPY tonie_header.proto .
 COPY tonie_header_pb2.py .
+COPY audio2tonie.sh .
 
 # Install static ffmpeg
 COPY --from=mwader/static-ffmpeg:7.1 /ffmpeg /usr/bin/
@@ -19,6 +20,8 @@ ENV PATH=/venv/bin:$PATH
 # Install protobuf
 RUN pip3 install protobuf
 
-# Add a script-based alias
-RUN echo '#!/bin/bash\n$(which python3) /app/opus2tonie.py "$@"' > /usr/bin/audio2tonie && \
-    chmod +x /usr/bin/audio2tonie
+# Add a script-based aliases
+RUN echo '#!/bin/bash\n/app/audio2tonie.sh "$@"' > /usr/bin/transcode && \
+    chmod +x /usr/bin/transcode
+RUN echo '#!/bin/bash\n$(which python3) /app/opus2tonie.py "$@"' > /usr/bin/opus2tonie && \
+    chmod +x /usr/bin/opus2tonie
