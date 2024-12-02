@@ -41,11 +41,7 @@ else
       echo "Finished! Enjoy."
       exit 0
     fi
-    count=0
-    for i in `find $SOURCE -type f -maxdepth 1 -name \*.mp3 -or -name "*.mp2" -or -name "*.m4a" -or -name "*.m4b" -or -name "*.opus" -or -name "*.ogg" -or -name "*.wav" -or -name "*.aac" -or -name "*.mp4"`;
-    do
-      (( count++ ))
-    done
+    count=$(find "$SOURCE" -type f \( -name "*.mp3" -o -name "*.mp2" -o -name "*.m4a" -o -name "*.m4b" -o -name "*.opus" -o -name "*.ogg" -o -name "*.wav" -o -name "*.aac" -o -name "*.mp4" \) | wc -l)
 fi
 
 echo $SEPARATOR
