@@ -22,6 +22,26 @@ if [ "$RECURSIVE" ]; then echo "Yes"; else echo "No"; fi
 
 if [[ $SOURCE == *.lst ]]; then
     count=$(sed -n '$=' "$SOURCE")
+elif [[ $SOURCE == *"www.ardaudiothek.de"* ]]; then
+  count=1
+  echo $SEPARATOR
+  echo "ARD Audiothek Link detected."
+  url_cleaned=${SOURCE%/}
+  id=${url_cleaned##*/}
+  episode_details=$(curl -s "https://api.ardaudiothek.de/graphql/items/$id")
+  episode_details_cleaned=$(echo $episode_details | awk '{ printf("%s ", $0) }' | sed 's/[^ -~]//g')
+  title=$(echo $episode_details_cleaned | jq -r '.data.item.title')
+  if [[ -n $title ]]; then
+     download_url=$(echo "$episode_details_cleaned" | jq -r '.data.item.audios[0].url')
+     title_cleaned=$(echo $title | sed -e 's/[^A-Za-z0-9.-]/./g' -e 's/\.\.\././g' -e 's/\.\././g' -e 's/\.*$//')
+     input_file=$(echo ${download_url##*/})
+     OUTPUT_FILE="/data/${title_cleaned}.taf"
+     echo "Chosen Episode: $title"
+     echo -n "Downloading source file..."
+     curl -s "$download_url" -o /data/$input_file
+     echo " Done."
+     SOURCE="/data/$input_file"
+  fi
 elif [[ "$SOURCE" == *.* ]]; then
     count=1
 else
@@ -49,7 +69,7 @@ echo "Start transcoding: "
 if [[ -z "$OUTPUT_FILE" ]]; then
   OUTPUT_FILE="${SOURCE%.*}.taf"
 fi
-python3 $OPUS_2_TONIE_PATH/opus2tonie.py "$SOURCE" "$OUTPUT_FILE"
 filename=$(basename "$OUTPUT_FILE")
-echo "Created $filename with $count chapter(s)."
+echo "Creating $filename with $count chapter(s)..."
+python3 $OPUS_2_TONIE_PATH/opus2tonie.py "$SOURCE" "$OUTPUT_FILE"
 echo "Finished! Enjoy."
