@@ -1,6 +1,6 @@
 FROM python:3.13.0-slim-bookworm
 
-RUN apt-get update && apt-get install -y opus-tools
+RUN apt-get update && apt-get install -y opus-tools && apt-get install -y curl && apt-get install -y jq
 
 WORKDIR /app
 
