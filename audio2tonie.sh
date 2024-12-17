@@ -9,6 +9,7 @@ while [[ "$#" -gt 0 ]]; do
         -s|--source) SOURCE="$2"; shift ;;
         -r|--recursive) RECURSIVE=1 ;;
         -o|--output) OUTPUT_FILE="$2"; shift ;;
+        -u|--upload) TEDDYCLOUD_IP="$2"; shift ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
     shift
@@ -19,6 +20,8 @@ echo -n "Output: "
 if [ "$OUTPUT_FILE" ]; then echo "$OUTPUT_FILE"; else echo "Undefined (auto mode)"; fi
 echo -n "Recursive: "
 if [ "$RECURSIVE" ]; then echo "Yes"; else echo "No"; fi
+echo -n "Teddycloud IP: "
+if [ "$TEDDYCLOUD_IP" ]; then echo "$TEDDYCLOUD_IP"; else echo "Undefined (no upload)"; fi
 
 if [[ $SOURCE == *.lst ]]; then
     count=$(sed -n '$=' "$SOURCE")
@@ -72,4 +75,13 @@ fi
 filename=$(basename "$OUTPUT_FILE")
 echo "Creating $filename with $count chapter(s)..."
 python3 $OPUS_2_TONIE_PATH/opus2tonie.py "$SOURCE" "$OUTPUT_FILE"
+if [ "$TEDDYCLOUD_IP" ]; then
+  echo -n "Uploading file to Teddycloud..."
+  response_code=$(curl -s -o /dev/null -F "file=@$OUTPUT_FILE" -w "%{http_code}" "http://$TEDDYCLOUD_IP/api/fileUpload?path=&special=library")
+  if [ "${response_code}" != 200 ]; then
+    echo "Error trying to upload to Teddycloud."
+  else
+    echo ": OK"
+  fi
+fi
 echo "Finished! Enjoy."
