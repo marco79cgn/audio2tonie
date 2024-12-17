@@ -59,6 +59,15 @@ else
           echo "${OUTPUT_FILE}..."
           python3 $OPUS_2_TONIE_PATH/opus2tonie.py "$d" "$SOURCE/$OUTPUT_FILE"
           echo "Created $OUTPUT_FILE with $count chapter(s)."
+          if [ "$TEDDYCLOUD_IP" ]; then
+            echo -n "Uploading file to Teddycloud..."
+            response_code=$(curl -s -o /dev/null -F "file=@$OUTPUT_FILE" -w "%{http_code}" "http://$TEDDYCLOUD_IP/api/fileUpload?path=&special=library")
+            if [ "${response_code}" != 200 ]; then
+              echo "Error trying to upload to Teddycloud."
+            else
+              echo ": OK"
+            fi
+          fi
           echo $SEPARATOR
       done
       echo "Finished! Enjoy."
