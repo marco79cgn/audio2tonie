@@ -16,12 +16,12 @@ Options:
   -s, --source SOURCE       Specify the source file or directory. Can be a single file, a directory, or a .lst file containing a list of files.
   -r, --recursive           Process directories recursively. Only applicable when the source is a directory.
   -o, --output OUTPUT_FILE  Specify the output file name. If not provided, the output file will be named based on the input file.
-  -u, --upload TEDDYCLOUD_IP Upload the generated TAF file to a Teddycloud server. Provide the IP address of the Teddycloud server.
+  -u, --upload URI          Upload the generated TAF file to a Teddycloud server. Provide the full URI (e.g., http://192.168.1.100 or https://teddycloud.local).
   -h, --help                Display this help message and exit.
 
 Examples:
   $0 -s /path/to/audio.mp3 -o /path/to/output.taf
-  $0 -s /path/to/audio_folder -r -u 192.168.1.100
+  $0 -s /path/to/audio_folder -r -u https://teddycloud.local
 EOF
     exit 0
 }
@@ -31,7 +31,7 @@ print_settings() {
     echo "Input: ${SOURCE:-}"
     echo "Output: ${OUTPUT_FILE:-Undefined (auto mode)}"
     echo "Recursive: ${RECURSIVE:-No}"
-    echo "Teddycloud IP: ${TEDDYCLOUD_IP:-Undefined (no upload)}"
+    echo "Teddycloud URI: ${TEDDYCLOUD_URI:-Undefined (no upload)}"
 }
 
 # Function to download ARD Audiothek episode
@@ -76,14 +76,38 @@ transcode_files() {
 # Function to upload file to Teddycloud
 upload_to_teddycloud() {
     local file="$1"
-    echo -n "Uploading file to Teddycloud..."
-    local response_code
-    response_code=$(curl -s -o /dev/null -F "file=@$file" -w "%{http_code}" "http://$TEDDYCLOUD_IP/api/fileUpload?path=&special=library") || { echo "Failed to upload file"; exit 1; }
-    if [[ "$response_code" != 200 ]]; then
-        echo "Error! Upload didn't succeed."
-    else
+    local uri="$2"
+
+    echo -n "Uploading file to Teddycloud ($uri)..."
+
+    # Use curl with -L to follow redirects (e.g., HTTP to HTTPS)
+    response_code=$(curl -s -o /dev/null -w "%{http_code}" -L -F "file=@$file" "${uri}/api/fileUpload?path=&special=library") || {
+        echo "Failed to upload file."
+        exit 1
+    }
+
+    if [[ "$response_code" == 200 ]]; then
         echo ": OK"
+    else
+        echo "Error! Upload failed with HTTP code: $response_code"
+        exit 1
     fi
+}
+
+# Function to validate and normalize the Teddycloud URI
+normalize_teddycloud_uri() {
+    local uri="$1"
+
+    # Ensure the URI starts with http:// or https://
+    if [[ ! "$uri" =~ ^https?:// ]]; then
+        echo "Error: Teddycloud URI must start with http:// or https://"
+        exit 1
+    fi
+
+    # Remove trailing slashes
+    uri="${uri%/}"
+
+    echo "$uri"
 }
 
 # Function to process directories recursively
@@ -131,9 +155,10 @@ main() {
 
     transcode_files "$SOURCE" "$OUTPUT_FILE" "$count"
 
-    if [[ -n "${TEDDYCLOUD_IP:-}" ]]; then
-        upload_to_teddycloud "$OUTPUT_FILE"
-    fi
+     if [[ -n "${TEDDYCLOUD_URI:-}" ]]; then
+            normalized_uri=$(normalize_teddycloud_uri "$TEDDYCLOUD_URI")
+            upload_to_teddycloud "$OUTPUT_FILE" "$normalized_uri"
+     fi
 
     echo "Finished! Enjoy."
 }
@@ -144,7 +169,7 @@ while [[ "$#" -gt 0 ]]; do
         -s|--source) SOURCE="$2"; shift ;;
         -r|--recursive) RECURSIVE=1 ;;
         -o|--output) OUTPUT_FILE="$2"; shift ;;
-        -u|--upload) TEDDYCLOUD_IP="$2"; shift ;;
+        -u|--upload) TEDDYCLOUD_URI="$2"; shift ;;
         -h|--help) display_help ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
