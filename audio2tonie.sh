@@ -1,5 +1,8 @@
 #!/bin/bash
 
+OPUS_2_TONIE_PATH=/app
+SEPARATOR='------'
+
 # Function to display help information
 display_help() {
     echo "Usage: $0 [options]"
@@ -20,11 +23,80 @@ display_help() {
     exit 0
 }
 
+# Function to print script settings
+print_settings() {
+    echo "Input: $SOURCE"
+    echo -n "Output: "
+    if [ "$OUTPUT_FILE" ]; then echo "$OUTPUT_FILE"; else echo "Undefined (auto mode)"; fi
+    echo -n "Recursive: "
+    if [ "$RECURSIVE" ]; then echo "Yes"; else echo "No"; fi
+    echo -n "Teddycloud IP: "
+    if [ "$TEDDYCLOUD_IP" ]; then echo "$TEDDYCLOUD_IP"; else echo "Undefined (no upload)"; fi
+}
 
-OPUS_2_TONIE_PATH=/app
-SEPARATOR='------'
-echo $SEPARATOR
+# Function to download ARD Audiothek episode
+download_ard_episode() {
+    echo $SEPARATOR
+    echo "ARD Audiothek Link detected."
+    url_cleaned=${SOURCE%/}
+    id=${url_cleaned##*/}
+    episode_details=$(curl -s "https://api.ardaudiothek.de/graphql/items/$id")
+    episode_details_cleaned=$(echo $episode_details | awk '{ printf("%s ", $0) }' | sed 's/[^ -~]//g')
+    title=$(echo $episode_details_cleaned | jq -r '.data.item.title')
+    if [[ -n $title ]]; then
+        download_url=$(echo "$episode_details_cleaned" | jq -r '.data.item.audios[0].url')
+        title_cleaned=$(echo $title | sed -e 's/[^A-Za-z0-9.-]/./g' -e 's/\.\.\././g' -e 's/\.\././g' -e 's/\.*$//')
+        input_file=$(echo ${download_url##*/})
+        OUTPUT_FILE="/data/${title_cleaned}.taf"
+        echo "Chosen Episode: $title"
+        echo -n "Downloading source file..."
+        curl -s "$download_url" -o /data/$input_file
+        echo " Done."
+        SOURCE="/data/$input_file"
+    fi
+}
 
+# Function to transcode files
+transcode_files() {
+    local input=$1
+    local output=$2
+    local count=$3
+    echo $SEPARATOR
+    echo "Start transcoding: "
+    echo "Creating $(basename "$output") with $count chapter(s)..."
+    python3 $OPUS_2_TONIE_PATH/opus2tonie.py "$input" "$output"
+}
+
+# Function to upload file to Teddycloud
+upload_to_teddycloud() {
+    local file=$1
+    echo -n "Uploading file to Teddycloud..."
+    response_code=$(curl -s -o /dev/null -F "file=@$file" -w "%{http_code}" "http://$TEDDYCLOUD_IP/api/fileUpload?path=&special=library")
+    if [ "${response_code}" != 200 ]; then
+        echo "Error! Upload didn't succeed."
+    else
+        echo ": OK"
+    fi
+}
+
+# Function to process directories recursively
+process_recursive() {
+    for d in $SOURCE/*/ ; do
+        DIRNAME=$(basename "$d")
+        OUTPUT_FILE="${DIRNAME}.taf"
+        echo "Current folder: $DIRNAME"
+        count=$(ls "$d" | wc -l)
+        transcode_files "$d" "$SOURCE/$OUTPUT_FILE" "$count"
+        if [ "$TEDDYCLOUD_IP" ]; then
+            upload_to_teddycloud "$SOURCE/$OUTPUT_FILE"
+        fi
+        echo $SEPARATOR
+    done
+    echo "Finished! Enjoy."
+    exit 0
+}
+
+# Parse command-line arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         -s|--source) SOURCE="$2"; shift ;;
@@ -37,82 +109,31 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-echo "Input: $SOURCE"
-echo -n "Output: "
-if [ "$OUTPUT_FILE" ]; then echo "$OUTPUT_FILE"; else echo "Undefined (auto mode)"; fi
-echo -n "Recursive: "
-if [ "$RECURSIVE" ]; then echo "Yes"; else echo "No"; fi
-echo -n "Teddycloud IP: "
-if [ "$TEDDYCLOUD_IP" ]; then echo "$TEDDYCLOUD_IP"; else echo "Undefined (no upload)"; fi
+echo $SEPARATOR
+print_settings
 
 if [[ $SOURCE == *.lst ]]; then
     count=$(sed -n '$=' "$SOURCE")
 elif [[ $SOURCE == *"www.ardaudiothek.de"* ]]; then
-  count=1
-  echo $SEPARATOR
-  echo "ARD Audiothek Link detected."
-  url_cleaned=${SOURCE%/}
-  id=${url_cleaned##*/}
-  episode_details=$(curl -s "https://api.ardaudiothek.de/graphql/items/$id")
-  episode_details_cleaned=$(echo $episode_details | awk '{ printf("%s ", $0) }' | sed 's/[^ -~]//g')
-  title=$(echo $episode_details_cleaned | jq -r '.data.item.title')
-  if [[ -n $title ]]; then
-     download_url=$(echo "$episode_details_cleaned" | jq -r '.data.item.audios[0].url')
-     title_cleaned=$(echo $title | sed -e 's/[^A-Za-z0-9.-]/./g' -e 's/\.\.\././g' -e 's/\.\././g' -e 's/\.*$//')
-     input_file=$(echo ${download_url##*/})
-     OUTPUT_FILE="/data/${title_cleaned}.taf"
-     echo "Chosen Episode: $title"
-     echo -n "Downloading source file..."
-     curl -s "$download_url" -o /data/$input_file
-     echo " Done."
-     SOURCE="/data/$input_file"
-  fi
+    download_ard_episode
+    count=1
 elif [[ "$SOURCE" == *.* ]]; then
     count=1
 else
     if [[ $RECURSIVE ]]; then
-      echo $SEPARATOR
-      for d in $SOURCE/*/ ; do
-          DIRNAME=$(basename "$d")
-          OUTPUT_FILE="${DIRNAME}.taf"
-          echo "Current folder: $DIRNAME"
-          count=$(ls "$d" | wc -l)
-          echo "Start transcoding: "
-          echo "${OUTPUT_FILE}..."
-          python3 $OPUS_2_TONIE_PATH/opus2tonie.py "$d" "$SOURCE/$OUTPUT_FILE"
-          echo "Created $OUTPUT_FILE with $count chapter(s)."
-          if [ "$TEDDYCLOUD_IP" ]; then
-            echo -n "Uploading file to Teddycloud..."
-            response_code=$(curl -s -o /dev/null -F "file=@$SOURCE/$OUTPUT_FILE" -w "%{http_code}" "http://$TEDDYCLOUD_IP/api/fileUpload?path=&special=library")
-            if [ "${response_code}" != 200 ]; then
-              echo "Error trying to upload to Teddycloud."
-            else
-              echo ": OK"
-            fi
-          fi
-          echo $SEPARATOR
-      done
-      echo "Finished! Enjoy."
-      exit 0
+        process_recursive
     fi
     count=$(find "$SOURCE" -type f \( -name "*.mp3" -o -name "*.mp2" -o -name "*.m4a" -o -name "*.m4b" -o -name "*.opus" -o -name "*.ogg" -o -name "*.wav" -o -name "*.aac" -o -name "*.mp4" \) | wc -l)
 fi
 
-echo $SEPARATOR
-echo "Start transcoding: "
 if [[ -z "$OUTPUT_FILE" ]]; then
-  OUTPUT_FILE="${SOURCE%.*}.taf"
+    OUTPUT_FILE="${SOURCE%.*}.taf"
 fi
-filename=$(basename "$OUTPUT_FILE")
-echo "Creating $filename with $count chapter(s)..."
-python3 $OPUS_2_TONIE_PATH/opus2tonie.py "$SOURCE" "$OUTPUT_FILE"
+
+transcode_files "$SOURCE" "$OUTPUT_FILE" "$count"
+
 if [ "$TEDDYCLOUD_IP" ]; then
-  echo -n "Uploading file to Teddycloud..."
-  response_code=$(curl -s -o /dev/null -F "file=@$OUTPUT_FILE" -w "%{http_code}" "http://$TEDDYCLOUD_IP/api/fileUpload?path=&special=library")
-  if [ "${response_code}" != 200 ]; then
-    echo "Error! Upload didn't succeed."
-  else
-    echo ": OK"
-  fi
+    upload_to_teddycloud "$OUTPUT_FILE"
 fi
+
 echo "Finished! Enjoy."
