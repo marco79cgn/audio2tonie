@@ -17,11 +17,13 @@ Options:
   -r, --recursive           Process directories recursively. Only applicable when the source is a directory.
   -o, --output OUTPUT_FILE  Specify the output file name. If not provided, the output file will be named based on the input file.
   -u, --upload URI          Upload the generated TAF file to a Teddycloud server. Provide the full URI (e.g., http://192.168.1.100 or https://teddycloud.local).
+  -p, --path PATH           Specify the target path in the Teddycloud library where the TAF file should be uploaded. Default is the root library folder.
   -h, --help                Display this help message and exit.
 
 Examples:
   $0 -s /path/to/audio.mp3 -o /path/to/output.taf
   $0 -s /path/to/audio_folder -r -u https://teddycloud.local
+  $0 -s /path/to/audio.mp3 -u https://teddycloud.local -p /custom/path
 EOF
     exit 0
 }
@@ -32,6 +34,7 @@ print_settings() {
     echo "Output: ${OUTPUT_FILE:-Undefined (auto mode)}"
     echo "Recursive: ${RECURSIVE:-No}"
     echo "Teddycloud URI: ${TEDDYCLOUD_URI:-Undefined (no upload)}"
+    echo "Teddycloud Path: ${TEDDYCLOUD_PATH:-/}"
 }
 
 # Function to download ARD Audiothek episode
@@ -77,11 +80,12 @@ transcode_files() {
 upload_to_teddycloud() {
     local file="$1"
     local uri="$2"
+    local path="${3:-/}"  # Default to root path if not specified
 
-    echo -n "Uploading file to Teddycloud ($uri)..."
+    echo -n "Uploading file to Teddycloud ($uri) at path '$path'..."
 
     # Use curl with -L to follow redirects (e.g., HTTP to HTTPS)
-    response_code=$(curl -s -o /dev/null -w "%{http_code}" -L -F "file=@$file" "${uri}/api/fileUpload?path=&special=library") || {
+    response_code=$(curl -s -o /dev/null -w "%{http_code}" -L -F "file=@$file" "${uri}/api/fileUpload?path=${path}&special=library") || {
         echo "Failed to upload file."
         exit 1
     }
@@ -210,6 +214,7 @@ while [[ "$#" -gt 0 ]]; do
         -r|--recursive) RECURSIVE=1 ;;
         -o|--output) OUTPUT_FILE="$2"; shift ;;
         -u|--upload) TEDDYCLOUD_URI="$2"; shift ;;
+        -p|--path) TEDDYCLOUD_PATH="$2"; shift ;;
         -h|--help) display_help ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
