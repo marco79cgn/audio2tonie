@@ -110,6 +110,34 @@ normalize_teddycloud_uri() {
     echo "$uri"
 }
 
+# Function to print TAF file creation details
+print_taf_creation_details() {
+    local input="$1"
+    local output="$2"
+    local count="$3"
+
+    echo "$SEPARATOR"
+    echo "Creating TAF file:"
+    echo "  - Input: $input"
+    echo "  - Output: $output"
+    echo "  - Number of chapters: $count"
+}
+
+# Function to check if a directory contains valid audio files
+has_valid_audio_files() {
+    local dir="$1"
+    local count
+    count=$(find "$dir" -maxdepth 1 -type f \( -name "*.mp3" -o -name "*.mp2" -o -name "*.m4a" -o -name "*.m4b" -o -name "*.opus" -o -name "*.ogg" -o -name "*.wav" -o -name "*.aac" -o -name "*.mp4" \) | wc -l)
+    [[ "$count" -gt 0 ]]
+}
+
+# Function to get the base name of a directory (without trailing slash)
+get_basename() {
+    local path="$1"
+    path="${path%/}"  # Remove trailing slash
+    basename "$path"
+}
+
 # Function to process directories recursively
 process_recursive() {
     for d in "$SOURCE"/*/; do
@@ -146,19 +174,31 @@ main() {
         if [[ -n "${RECURSIVE:-}" ]]; then
             process_recursive
         fi
+
+        # Check if the directory contains valid audio files
+        if ! has_valid_audio_files "$SOURCE"; then
+            echo "Error: No valid audio files found in the directory: $SOURCE"
+            exit 1
+        fi
+
         count=$(find "$SOURCE" -type f \( -name "*.mp3" -o -name "*.mp2" -o -name "*.m4a" -o -name "*.m4b" -o -name "*.opus" -o -name "*.ogg" -o -name "*.wav" -o -name "*.aac" -o -name "*.mp4" \) | wc -l)
     fi
 
     if [[ -z "${OUTPUT_FILE:-}" ]]; then
-        OUTPUT_FILE="${SOURCE%.*}.taf"
+        # Use the folder name as the base name for the .taf file
+        SOURCE="${SOURCE%/}"  # Remove trailing slash
+        OUTPUT_FILE="${SOURCE}.taf"
     fi
+
+    # Print TAF file creation details
+    print_taf_creation_details "$SOURCE" "$OUTPUT_FILE" "$count"
 
     transcode_files "$SOURCE" "$OUTPUT_FILE" "$count"
 
-     if [[ -n "${TEDDYCLOUD_URI:-}" ]]; then
-            normalized_uri=$(normalize_teddycloud_uri "$TEDDYCLOUD_URI")
-            upload_to_teddycloud "$OUTPUT_FILE" "$normalized_uri"
-     fi
+    if [[ -n "${TEDDYCLOUD_URI:-}" ]]; then
+        normalized_uri=$(normalize_teddycloud_uri "$TEDDYCLOUD_URI")
+        upload_to_teddycloud "$OUTPUT_FILE" "$normalized_uri"
+    fi
 
     echo "Finished! Enjoy."
 }
