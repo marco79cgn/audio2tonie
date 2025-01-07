@@ -1,5 +1,26 @@
 #!/bin/bash
 
+# Function to display help information
+display_help() {
+    echo "Usage: $0 [options]"
+    echo
+    echo "This script converts audio files to the Toniebox TAF format and optionally uploads them to a Teddycloud server."
+    echo
+    echo "Options:"
+    echo "  -s, --source SOURCE       Specify the source file or directory. Can be a single file, a directory, or a .lst file containing a list of files."
+    echo "  -r, --recursive           Process directories recursively. Only applicable when the source is a directory."
+    echo "  -o, --output OUTPUT_FILE  Specify the output file name. If not provided, the output file will be named based on the input file."
+    echo "  -u, --upload TEDDYCLOUD_IP Upload the generated TAF file to a Teddycloud server. Provide the IP address of the Teddycloud server."
+    echo "  -h, --help                Display this help message and exit."
+    echo
+    echo "Examples:"
+    echo "  $0 -s /path/to/audio.mp3 -o /path/to/output.taf"
+    echo "  $0 -s /path/to/audio_folder -r -u 192.168.1.100"
+    echo
+    exit 0
+}
+
+
 OPUS_2_TONIE_PATH=/app
 SEPARATOR='------'
 echo $SEPARATOR
@@ -10,6 +31,7 @@ while [[ "$#" -gt 0 ]]; do
         -r|--recursive) RECURSIVE=1 ;;
         -o|--output) OUTPUT_FILE="$2"; shift ;;
         -u|--upload) TEDDYCLOUD_IP="$2"; shift ;;
+        -h|--help) display_help ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
     shift
