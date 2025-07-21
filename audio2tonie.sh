@@ -36,14 +36,15 @@ elif [[ $SOURCE == *"www.ardaudiothek.de"* ]]; then
   title=$(echo $episode_details_cleaned | jq -r '.data.item.title')
   if [[ -n $title ]]; then
      download_url=$(echo "$episode_details_cleaned" | jq -r '.data.item.audios[0].url')
-     title_cleaned=$(echo $title | sed -e 's/[^A-Za-z0-9.-]/./g' -e 's/\.\.\././g' -e 's/\.\././g' -e 's/\.*$//')
+     show_title=$(echo "$episode_details_cleaned" | jq -r '.data.item.programSet.title')
+     title_cleaned=$(echo "$show_title - $title" | sed 's/[^a-zA-Z0-9äöüÄÖÜß ()._-]/_/g')
      input_file=$(echo ${download_url##*/})
      OUTPUT_FILE="/data/${title_cleaned}.taf"
      echo "Chosen Episode: $title"
      echo -n "Downloading source file..."
-     curl -s "$download_url" -o /data/$input_file
+     ffmpeg -loglevel quiet -stats -i "$download_url" -ac 2 -c:a libopus -b:a 96k "/data/$title_cleaned.opus"
      echo " Done."
-     SOURCE="/data/$input_file"
+     SOURCE="/data/$title_cleaned.opus"
   fi
 elif [[ "$SOURCE" == *.* ]]; then
     count=1
