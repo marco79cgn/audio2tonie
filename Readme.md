@@ -6,11 +6,17 @@ A fast and easy way to transcode any audio files to a format which is playable b
 
 This fork is based on the [opus2tonie.py](https://github.com/bailli/opus2tonie) script. But since it's quite difficult to set up and has lots of dependencies (ffmpeg, Python, Google Protobuf, etc.) I decided to build a docker container. Some small updates have been implemented as well as a shell script which is used as a wrapper for the entrypoint.
 
-### Installation (Build from source)
+### Installation 
+
+**Option 1: Build from source**
 
 - `git clone https://github.com/marco79cgn/audio2tonie.git`
 - `cd audio2tonie`
 - `docker build -t audio2tonie .`
+
+**Option 2: Use prebuilt docker image from this repository**
+
+Image ID: `ghcr.io/marco79cgn/audio2tonie`
 
 ### Usage
 
@@ -41,6 +47,14 @@ docker run --rm -v $(pwd):/data audio2tonie transcode -s /data/audiobook.mp3
 
 Output: 
 audiobook.taf
+```
+- Convert content from [ARD Audiothek](https://www.ardaudiothek.de/), e.g. latest Sandmännchen with url `https://www.ardaudiothek.de/episode/urn:ard:episode:4f223e3b7c1dfe52/`
+```
+Command:
+docker run --rm -v $(pwd):/data audio2tonie transcode -s [audiothek-url]
+
+Output: 
+Unser Sandmnnchen - Raketenflieger Timmi_ Der Traumplanet.taf
 ```
 - Convert a single file `audiobook.mp3` from your current directory with given output name
 ```
