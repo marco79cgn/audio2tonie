@@ -52,16 +52,16 @@ download_ard_episode() {
     if [[ -n "$title" ]]; then
         local download_url
         download_url=$(echo "$episode_details_cleaned" | jq -r '.data.item.audios[0].url') || { echo "Failed to parse download URL"; exit 1; }
+        local show_title
+        show_title=$(echo "$episode_details_cleaned" | jq -r '.data.item.programSet.title')
         local title_cleaned
-        title_cleaned=$(echo "$title" | sed -e 's/[^A-Za-z0-9.-]/./g' -e 's/\.\.\././g' -e 's/\.\././g' -e 's/\.*$//')
-        local input_file
-        input_file=$(basename "$download_url")
+        title_cleaned=$(echo "$show_title - $title" | sed 's/[^a-zA-Z0-9äöüÄÖÜß ()._-]/_/g')
         OUTPUT_FILE="/data/${title_cleaned}.taf"
         echo "Chosen Episode: $title"
         echo -n "Downloading source file..."
-        curl -s "$download_url" -o "/data/$input_file" || { echo "Failed to download file"; exit 1; }
+        ffmpeg -loglevel quiet -stats -i "$download_url" -ac 2 -c:a libopus -b:a 96k "/data/$title_cleaned.opus" || { echo "Failed to download file"; exit 1; }
         echo " Done."
-        SOURCE="/data/$input_file"
+        SOURCE="/data/$title_cleaned.opus"
     fi
 }
 
@@ -220,12 +220,6 @@ while [[ "$#" -gt 0 ]]; do
     esac
     shift
 done
-
-# Validate required arguments
-if [[ -z "${SOURCE:-}" ]]; then
-    echo "Error: --source is required."
-    display_help
-fi
 
 # Run the main script logic
 main
