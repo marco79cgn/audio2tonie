@@ -13,17 +13,19 @@ Usage: $0 [options]
 This script converts audio files to the Toniebox TAF format and optionally uploads them to a Teddycloud server.
 
 Options:
-  -s, --source SOURCE       Specify the source file or directory. Can be a single file, a directory, or a .lst file containing a list of files.
-  -r, --recursive           Process directories recursively. Only applicable when the source is a directory.
-  -o, --output OUTPUT_FILE  Specify the output file name. If not provided, the output file will be named based on the input file.
-  -u, --upload URI          Upload the generated TAF file to a Teddycloud server. Provide the full URI (e.g., http://192.168.1.100 or https://teddycloud.local).
-  -p, --path PATH           Specify the target path in the Teddycloud library where the TAF file should be uploaded. Default is the root library folder.
-  -h, --help                Display this help message and exit.
+  -s, --source SOURCE            Specify the source file or directory. Can be a single file, a directory, a .lst file, or a YouTube URL.
+  -r, --recursive                Process directories recursively. Only applicable when the source is a directory.
+  -o, --output OUTPUT_FILE       Specify the output file name. If not provided, the output file will be named based on the input file.
+  -u, --upload URI               Upload the generated TAF file to a Teddycloud server. Provide the full URI (e.g., http://192.168.1.100 or https://teddycloud.local).
+  -p, --path PATH                Specify the target path in the Teddycloud library where the TAF file should be uploaded. Default is the root library folder.
+-c, --cookie COOKIE_FILE_PATH  Specify the path to a cookies.txt file for YouTube downloads. 
+  -h, --help                     Display this help message and exit.
 
 Examples:
   $0 -s /path/to/audio.mp3 -o /path/to/output.taf
   $0 -s /path/to/audio_folder -r -u https://teddycloud.local
-  $0 -s /path/to/audio.mp3 -u https://teddycloud.local -p /custom/path
+  $0 -s https://www.youtube.com/watch?v=example -u https://teddycloud.local
+  $0 -s https://www.youtube.com/playlist?list=example -u https://teddycloud.local
 EOF
     exit 0
 }
@@ -35,6 +37,7 @@ print_settings() {
     echo "Recursive: ${RECURSIVE:-No}"
     echo "Teddycloud URI: ${TEDDYCLOUD_URI:-Undefined (no upload)}"
     echo "Teddycloud Path: ${TEDDYCLOUD_PATH:-/}"
+    echo "Cookie File Path: ${COOKIE_FILE_PATH:-Undefined (no cookies)}"
 }
 
 # Function to download ARD Audiothek episode
@@ -162,6 +165,58 @@ process_recursive() {
     exit 0
 }
 
+# Function to download YouTube audio as MP3
+download_youtube_audio() {
+    local url="$1"
+    local output_dir="$2"
+    
+    echo "Downloading YouTube audio: $url"
+    
+    # Download the highest quality audio as MP3
+    yt-dlp -x ${YT_DLP_COOKIES_OPTION} --parse-metadata "%(thumbnail)s:%(meta_thumbnail_url)s" --embed-thumbnail --add-metadata --audio-format mp3 --audio-quality 0 -o "$output_dir/%(title)s.%(ext)s" "$url"
+}
+
+# Function to handle YouTube playlists
+handle_youtube_playlist() {
+    local url="$1"
+    local output_dir="$2"
+    
+    # Send progress messages to stderr
+    echo "Processing YouTube playlist: $url" >&2
+    
+    # Extract the playlist title
+    PLAYLIST_TITLE=$(yt-dlp --flat-playlist --print "%(playlist_title)s" "$url" ${YT_DLP_COOKIES_OPTION} | head -n 1)
+    if [[ -z "$PLAYLIST_TITLE" ]]; then
+        echo "Error: Failed to extract playlist title." >&2
+        exit 1
+    fi
+    # Sanitize the playlist title for use as a filename
+    PLAYLIST_TITLE_SANITIZED=$(echo "$PLAYLIST_TITLE" | tr -cd '[:alnum:]._-' | tr ' ' '_')
+
+    # Create .lst file with playlist name as metadata
+    LST_FILE="${output_dir}/${PLAYLIST_TITLE_SANITIZED}.lst"
+    echo "#PLAYLIST_NAME=${PLAYLIST_TITLE}" > "$LST_FILE"  # Add playlist name
+    
+    # Download all videos in the playlist as MP3
+    echo "Downloading playlist to: $output_dir" >&2
+    echo "with cookies" >&2
+    yt-dlp -x --audio-format mp3 --audio-quality 0 --parse-metadata "%(thumbnail)s:%(meta_thumbnail_url)s" --embed-thumbnail --add-metadata -o "$output_dir/%(playlist_index)s - %(title).100s.%(ext)s" --yes-playlist "$url" ${YT_DLP_COOKIES_OPTION} >&2
+    
+    # Verify that files were downloaded
+    if [[ $(find "$output_dir" -type f -name "*.mp3" | wc -l) -eq 0 ]]; then
+        echo "Error: No MP3 files were downloaded." >&2
+        exit 1
+    fi
+    
+    # Create a .lst file with the correct order of the playlist entries
+    find "$output_dir" -type f -name "*.mp3" | sort -V >> "$LST_FILE"
+    
+    echo "Created .lst file: $LST_FILE" >&2
+    
+    # Return only the .lst file path
+    echo "$LST_FILE"
+}
+
 # Main script logic
 main() {
     echo "$SEPARATOR"
@@ -172,6 +227,29 @@ main() {
     elif [[ "$SOURCE" == *"www.ardaudiothek.de"* ]]; then
         download_ard_episode
         count=1
+    elif [[ "$SOURCE" == *"www.youtube.com"* || "$SOURCE" == *"youtu.be"* ]]; then
+        # Handle YouTube URLs
+        TEMP_DIR=$(mktemp -d)
+        echo "Created temporary directory: $TEMP_DIR"
+
+        if [[ -n "${COOKIE_FILE_PATH:-}" ]]; then
+            echo "Using cookies from: $COOKIE_FILE_PATH"
+            YT_DLP_COOKIES_OPTION="--cookies $COOKIE_FILE_PATH"
+        else
+            YT_DLP_COOKIES_OPTION=""
+        fi
+        
+        if [[ "$SOURCE" == *"playlist"* ]]; then
+            # Handle YouTube playlist
+            LST_FILE=$(handle_youtube_playlist "$SOURCE" "$TEMP_DIR")
+            SOURCE="$LST_FILE"
+        else
+            # Handle single YouTube video
+            download_youtube_audio "$SOURCE" "$TEMP_DIR"
+            SOURCE=$(find "$TEMP_DIR" -type f -name "*.mp3" | head -n 1)
+        fi
+        
+        count=$(sed -n '$=' "$SOURCE")
     elif [[ "$SOURCE" == *.* ]]; then
         count=1
     else
@@ -197,6 +275,8 @@ main() {
     # Print TAF file creation details
     print_taf_creation_details "$SOURCE" "$OUTPUT_FILE" "$count"
 
+    # Transcode the files
+    echo "Starting transcoding..."
     transcode_files "$SOURCE" "$OUTPUT_FILE" "$count"
 
     if [[ -n "${TEDDYCLOUD_URI:-}" ]]; then
@@ -215,6 +295,7 @@ while [[ "$#" -gt 0 ]]; do
         -o|--output) OUTPUT_FILE="$2"; shift ;;
         -u|--upload) TEDDYCLOUD_URI="$2"; shift ;;
         -p|--path) TEDDYCLOUD_PATH="$2"; shift ;;
+        -c|--cookie) COOKIE_FILE_PATH="$2"; shift ;;
         -h|--help) display_help ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
