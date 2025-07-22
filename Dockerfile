@@ -1,14 +1,10 @@
 FROM python:3.13.5-slim-bookworm@sha256:6a052e11d3de2d0d55b94707ba4dd6786c10fb66610061e0a5396039a6ca2411
 
-RUN apt-get update && apt-get install -y opus-tools && apt-get install -y curl && apt-get install -y jq
+RUN apt-get update && apt-get install -y opus-tools && apt-get install -y curl && apt-get install -y jq 
 
 WORKDIR /app
 
-# Copy opus2tonie files
-COPY opus2tonie.py .
-COPY tonie_header.proto .
-COPY tonie_header_pb2.py .
-COPY audio2tonie.sh .
+COPY requirements.txt .
 
 # Install static ffmpeg
 COPY --from=mwader/static-ffmpeg:7.1 /ffmpeg /usr/bin/
@@ -18,7 +14,13 @@ RUN python3 -m venv /venv
 ENV PATH=/venv/bin:$PATH
 
 # Install protobuf
-RUN pip3 install protobuf
+RUN pip3 install -r requirements.txt
+
+# Copy opus2tonie files
+COPY opus2tonie.py .
+COPY tonie_header.proto .
+COPY tonie_header_pb2.py .
+COPY audio2tonie.sh .
 
 # Add a script-based aliases
 RUN echo '#!/bin/bash\n/app/audio2tonie.sh "$@"' > /usr/bin/transcode && \
