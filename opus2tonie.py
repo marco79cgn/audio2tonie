@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+import json
+import base64
 import argparse
 import datetime
 import glob
@@ -12,6 +14,12 @@ import sys
 import tempfile
 import time
 import tonie_header_pb2
+import mutagen
+
+try:
+    import mutagen
+except ImportError:
+    mutagen = None
 
 try:
     import librecaptcha
@@ -630,8 +638,12 @@ def fix_tonie_header(out_file, chapters, timestamp, sha):
     out_file.write(header)
 
 
-def create_tonie_file(output_file, input_files, no_tonie_header=False, user_timestamp=None,
+def create_tonie_file(output_file, input_files, playlist_name=None, no_tonie_header=False, user_timestamp=None,
                       bitrate=96, cbr=False, ffmpeg='ffmpeg', opusenc='opusenc'):
+    
+    track_titles = []
+    image_data = None
+    
     with open(output_file, "wb") as out_file:
         if not no_tonie_header:
             out_file.write(bytearray(0x1000))
@@ -665,9 +677,41 @@ def create_tonie_file(output_file, input_files, no_tonie_header=False, user_time
 
             if fname.lower().endswith(".opus"):
                 handle = open(fname, "rb")
+                current_track_title = os.path.splitext(os.path.basename(fname))[0]
+                track_titles.append(current_track_title)
             elif fname.lower().startswith("text:"):
                 handle = get_t2s_tempfile(ffmpeg, opusenc, fname[5:], bitrate, not cbr)
+                track_titles.append(fname[5:])
             else:
+                current_track_title = os.path.splitext(os.path.basename(fname))[0]
+                if mutagen is not None:
+                    try:
+                        audio = mutagen.File(fname)
+                        if audio is not None:
+                            title = None
+                            if 'TIT2' in audio.tags:
+                                title = audio.tags['TIT2'].text[0]
+                            elif 'TITLE' in audio.tags:
+                                title = audio.tags['TITLE'][0]
+                            elif '©nam' in audio.tags:
+                                title = audio.tags['©nam'][0]
+                            if title:
+                                current_track_title = title
+                            
+                            # Extract thumbnail URL from metadata
+                        if not image_data:
+                            # Check for TXXX frame (ID3v2)
+                            if hasattr(audio, 'tags') and audio.tags:
+                                for tag in audio.tags.values():
+                                    if isinstance(tag, mutagen.id3.TXXX) and tag.desc.lower() == 'thumbnail_url':
+                                        image_data = tag.text[0]
+                                        break
+                                # Fallback to generic tag access
+                                if not image_data and 'thumbnail_url' in audio.tags:
+                                    image_data = audio.tags['thumbnail_url'][0]
+                    except Exception as e:
+                        print(f"Error reading metadata from {fname}: {e}", file=sys.stderr)
+                track_titles.append(current_track_title)
                 handle = get_opus_tempfile(ffmpeg, opusenc, fname, bitrate, not cbr)
 
             try:
@@ -701,6 +745,25 @@ def create_tonie_file(output_file, input_files, no_tonie_header=False, user_time
 
         if not no_tonie_header:
             fix_tonie_header(out_file, chapters, timestamp, sha1)
+
+    # Generate JSON file
+    json_filename = os.path.splitext(output_file)[0] + '.json'
+    json_content = {
+        "no": "0",
+        "model": str(output_file),
+        "audio_id": [ str(timestamp) ],
+        "hash": [ sha1.hexdigest() ],
+        "title":  playlist_name if playlist_name else "Custom Tonie Example Title",
+        "series": "Custom Tonie",
+        "episodes": playlist_name if playlist_name else "This is my custom tonie",
+        "tracks": track_titles,
+        "release": "0",
+        "language": "de-de",
+        "category": "custom",
+        "pic": image_data if image_data else ""
+    }
+    with open(json_filename, 'w') as json_file:
+        json.dump(json_content, json_file, indent=4)
 
 
 def get_header_info(in_file):
@@ -935,11 +998,19 @@ def filter_directories(glob_list):
 
 
 def get_input_files(input_filename):
+    playlist_name = None  # Initialize variable
     if input_filename.endswith(".lst"):
         list_dir = os.path.dirname(os.path.abspath(input_filename))
         input_files = []
         with open(input_filename) as file_list:
-            for line in file_list:
+            lines = file_list.readlines()
+            
+            # Check first line for playlist name
+            if lines and lines[0].startswith("#PLAYLIST_NAME="):
+                playlist_name = lines[0].split("=", 1)[1].strip()
+                lines = lines[1:]  # Skip metadata line
+                
+            for line in lines:
                 fname = line.rstrip()
                 if fname.startswith("text:") and not T2S_AVAILABLE:
                     raise RuntimeError("You cannot use text2speech (\"text:\" list entries) without librecaptcha")
@@ -947,9 +1018,10 @@ def get_input_files(input_filename):
                     input_files.append(fname)
                 else:
                     input_files.append(os.path.join(list_dir, fname))
+        return input_files, playlist_name  # Return both files and playlist name           
     else:
         input_files = sorted(filter_directories(glob.glob("{}".format(input_filename))))
-    return input_files
+    return input_files, playlist_name
 
 
 def split_to_opus_files(filename, output):
@@ -1041,7 +1113,7 @@ else:
         split_to_opus_files(args.input_filename, args.output_filename)
         sys.exit(0)
 
-files = get_input_files(args.input_filename)
+files, playlist_name = get_input_files(args.input_filename)
 
 if len(files) == 0:
     print("No files found for pattern {}".format(args.input_filename))
@@ -1052,5 +1124,5 @@ out_filename = args.output_filename if args.output_filename else '500304E0'
 if args.append_tonie_filename and args.output_filename:
     out_filename = append_to_filename(args.output_filename, "[500304E0]")
 
-create_tonie_file(out_filename, files, args.no_tonie_header, args.user_timestamp,
+create_tonie_file(out_filename, files, playlist_name , args.no_tonie_header, args.user_timestamp,
                   args.bitrate, args.cbr, args.ffmpeg, args.opusenc)
