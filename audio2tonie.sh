@@ -58,10 +58,34 @@ download_ard_episode() {
         local show_title
         show_title=$(echo "$episode_details_cleaned" | jq -r '.data.item.programSet.title')
         local title_cleaned
-        title_cleaned=$(echo "$show_title - $title" | sed 's/[^a-zA-Z0-9äöüÄÖÜß ()._-]/_/g')
+        title_cleaned=$(echo "$show_title - $title" | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g')
         OUTPUT_FILE="/data/${title_cleaned}.taf"
         echo "Chosen Episode: $title"
-        echo -n "Downloading source file..."
+        echo -n "Downloading source file $download_url ..."
+        ffmpeg -loglevel quiet -stats -i "$download_url" -ac 2 -c:a libopus -b:a 96k "/data/$title_cleaned.opus" || { echo "Failed to download file"; exit 1; }
+        echo " Done."
+        SOURCE="/data/$title_cleaned.opus"
+    fi
+}
+
+download_podtail_podcast() {
+    echo "$SEPARATOR"
+    echo "Podtail Podcast Link detected."
+
+    local url_cleaned="${SOURCE%/}"
+    local id=$(curl -s "$url_cleaned" | sed -n 's/.*data-id="\([0-9]*\)".*/\1/p' | head -1) || { echo "Failed to fetch Podcast episode id"; exit 1; }
+    local episode_details
+    episode_details=$(curl -s "https://podtail.com/de/podcast/episode/json/?id=$id") || { echo "Failed to fetch Podcast episode details"; exit 1; }
+    local title
+    title=$(echo "$episode_details" | jq -r '.media.title') || { echo "Failed to parse Podcast episode title"; exit 1; }
+    if [[ -n "$title" ]]; then
+        local download_url
+        download_url=$(echo "$episode_details" | jq -r '.media.mediaUrl') || { echo "Failed to parse Podcast download URL"; exit 1; }
+        local title_cleaned
+        title_cleaned=$(echo "$title" | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g')
+        OUTPUT_FILE="/data/${title_cleaned}.taf"
+        echo "Chosen Podcast Episode: $title"
+        echo -n "Downloading source file $download_url ..."
         ffmpeg -loglevel quiet -stats -i "$download_url" -ac 2 -c:a libopus -b:a 96k "/data/$title_cleaned.opus" || { echo "Failed to download file"; exit 1; }
         echo " Done."
         SOURCE="/data/$title_cleaned.opus"
@@ -226,6 +250,9 @@ main() {
         count=$(sed -n '$=' "$SOURCE")
     elif [[ "$SOURCE" == *"www.ardaudiothek.de"* ]]; then
         download_ard_episode
+        count=1
+    elif [[ "$SOURCE" == *"podtail.com"* ]]; then
+        download_podtail_podcast
         count=1
     elif [[ "$SOURCE" == *"www.youtube.com"* || "$SOURCE" == *"youtu.be"* ]]; then
         # Handle YouTube URLs
