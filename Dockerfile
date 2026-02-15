@@ -7,7 +7,7 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install static ffmpeg
-COPY --from=mwader/static-ffmpeg:7.1 /ffmpeg /usr/bin/
+COPY --from=mwader/static-ffmpeg:8.0.1 /ffmpeg /usr/bin/
 
 # Create the virtual environment
 RUN python3 -m venv /venv
