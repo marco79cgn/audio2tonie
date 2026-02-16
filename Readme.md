@@ -44,6 +44,7 @@ docker run --rm -v $(pwd):/data [IMAGE ID] transcode \
 | `-s/--source SOURCE` | ✅ Yes | Input source: file, folder, list (*.lst), or URL |
 | `-o/--output OUTPUT` | ❌ No | Output filename (default: same as input with .taf extension) |
 | `-r/--recursive` | ❌ No | Creates a .taf file for each subfolder recursively |
+| `-u/--upload TEDDYCLOUD_URL` | ❌ No | Upload the resulting .taf file directly to your Teddycloud instance |
 
 ***
 
@@ -109,6 +110,30 @@ docker run --rm -v $(pwd):/data audio2tonie transcode -s /data -r
 docker run --rm -v $(pwd):/data audio2tonie transcode -s /data/MyFavoriteList.lst
 ```
 → Output: `MyFavoriteList.taf` (with 4 chapters)
+
+***
+
+## ☁️ Upload to Teddycloud
+
+You can automatically upload the converted .taf file to your Teddycloud instance by using the `-u` parameter.
+
+**Convert and upload in one step**
+```bash
+docker run --rm -v $(pwd):/data audio2tonie transcode \
+    -s /data/audiobook.mp3 \
+    -u "http://192.168.178.5"
+```
+→ Output: `audiobook.taf` uploaded to your Teddycloud at `http://192.168.178.5`
+
+**Download podcast and upload to Teddycloud**
+```bash
+docker run --rm -v $(pwd):/data audio2tonie transcode \
+    -s "https://podtail.com/podcast/example-episode/" \
+    -u "http://192.168.178.5"
+```
+→ Downloads, converts, and uploads directly to your Teddycloud
+
+**Note:** Replace `http://192.168.178.5` with your actual Teddycloud IP address or hostname.
 
 ***
 
