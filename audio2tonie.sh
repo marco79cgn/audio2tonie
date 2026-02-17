@@ -180,8 +180,9 @@ process_recursive() {
         local count
         count=$(find "$d" -maxdepth 1 -type f | wc -l)
         transcode_files "$d" "$SOURCE/$OUTPUT_FILE" "$count"
-        if [[ -n "${TEDDYCLOUD_IP:-}" ]]; then
-            upload_to_teddycloud "$SOURCE/$OUTPUT_FILE"
+        if [[ -n "${TEDDYCLOUD_URI:-}" ]]; then
+            normalized_uri=$(normalize_teddycloud_uri "$TEDDYCLOUD_URI")
+            upload_to_teddycloud "$SOURCE/$OUTPUT_FILE" "$normalized_uri" "${TEDDYCLOUD_PATH:-/}"
         fi
         echo "$SEPARATOR"
     done
